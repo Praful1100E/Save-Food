@@ -85,6 +85,9 @@
                     <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#registerModal">
                         <i class="fas fa-user-plus me-1"></i>Sign Up
                     </button>
+                    <button class="btn btn-outline-warning me-2" data-bs-toggle="modal" data-bs-target="#adminLoginModal">
+                        <i class="fas fa-user-shield me-1"></i>Admin
+                    </button>
                 </div>
             </div>
         </div>
@@ -288,19 +291,19 @@
         <div class="container">
             <div class="row text-center">
                 <div class="col-md-3 mb-4">
-                    <div class="stats-counter" id="totalDonations">0</div>
+                    <div class="stats-counter" id="totalDonations">1,247</div>
                     <p class="mb-0">Total Donations</p>
                 </div>
                 <div class="col-md-3 mb-4">
-                    <div class="stats-counter" id="mealsServed">0</div>
+                    <div class="stats-counter" id="mealsServed">8,934</div>
                     <p class="mb-0">Meals Served</p>
                 </div>
                 <div class="col-md-3 mb-4">
-                    <div class="stats-counter" id="co2Saved">0</div>
+                    <div class="stats-counter" id="co2Saved">15,672</div>
                     <p class="mb-0">kg CO₂ Saved</p>
                 </div>
                 <div class="col-md-3 mb-4">
-                    <div class="stats-counter" id="activeUsers">0</div>
+                    <div class="stats-counter" id="activeUsers">342</div>
                     <p class="mb-0">Active Users</p>
                 </div>
             </div>
@@ -449,6 +452,46 @@
                         </div>
                         <button type="submit" class="btn btn-success w-100">Create Account</button>
                     </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Login Modal -->
+    <div class="modal fade" id="adminLoginModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-warning">
+                    <h5 class="modal-title">
+                        <i class="fas fa-user-shield me-2"></i>Admin Login
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>Admin Access Only</strong><br>
+                        This section is restricted to authorized administrators only.
+                    </div>
+                    <form id="adminLoginForm">
+                        <div class="mb-3">
+                            <label for="adminUsername" class="form-label">Username</label>
+                            <input type="text" class="form-control" id="adminUsername" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="adminPassword" class="form-label">Password</label>
+                            <input type="password" class="form-control" id="adminPassword" required>
+                        </div>
+                        <button type="submit" class="btn btn-warning w-100">
+                            <i class="fas fa-sign-in-alt me-2"></i>Login as Admin
+                        </button>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <small class="text-muted">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Default credentials: admin / admin123
+                    </small>
                 </div>
             </div>
         </div>

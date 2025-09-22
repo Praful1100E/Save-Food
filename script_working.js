@@ -6,6 +6,7 @@ let foodLocations = [];
 // Initialize the application when DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
     initializeApp();
+    initializeAdminSystem();
 });
 
 // Main initialization function
@@ -754,6 +755,933 @@ function initializeAnimations() {
     });
 }
 
+// Admin System Functions
+let currentAdmin = null;
+
+// Initialize admin system
+function initializeAdminSystem() {
+    console.log('Admin system initializing...');
+
+    // Check for existing admin session
+    const savedAdmin = localStorage.getItem('foodshare_admin');
+    if (savedAdmin) {
+        currentAdmin = JSON.parse(savedAdmin);
+        updateUIForAdminLogin();
+    }
+
+    // Initialize admin login form
+    const adminLoginForm = document.getElementById('adminLoginForm');
+    if (adminLoginForm) {
+        adminLoginForm.addEventListener('submit', handleAdminLogin);
+    }
+
+    // Initialize default admin if none exists
+    initializeDefaultAdmin().catch(error => {
+        console.error('Error initializing default admin:', error);
+    });
+}
+
+// Handle admin login
+function handleAdminLogin(e) {
+    e.preventDefault();
+
+    const username = document.getElementById('adminUsername').value;
+    const password = document.getElementById('adminPassword').value;
+
+    // Validation
+    if (!username || !password) {
+        showNotification('Please fill in all fields', 'error');
+        return;
+    }
+
+    // Demo admin login - accept default credentials
+    if (username === 'admin' && password === 'admin123') {
+        currentAdmin = {
+            name: 'System Administrator',
+            username: username,
+            email: 'admin@foodshare.com',
+            role: 'super_admin',
+            id: Date.now(),
+            login_time: new Date().toISOString()
+        };
+
+        // Save admin session
+        localStorage.setItem('foodshare_admin', JSON.stringify(currentAdmin));
+
+        // Update UI
+        updateUIForAdminLogin();
+
+        // Close modal
+        const modal = bootstrap.Modal.getInstance(document.getElementById('adminLoginModal'));
+        modal.hide();
+
+        showNotification('Welcome, Admin!', 'success');
+
+        // Show admin dashboard
+        showAdminDashboard();
+    } else {
+        showNotification('Invalid admin credentials', 'error');
+    }
+}
+
+// Update UI for admin login
+function updateUIForAdminLogin() {
+    const navButtons = document.querySelector('.d-flex');
+    if (navButtons && currentAdmin) {
+        navButtons.innerHTML = `
+            <div class="dropdown">
+                <button class="btn btn-outline-warning dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                    <i class="fas fa-user-shield me-1"></i>${currentAdmin.name}
+                </button>
+                <ul class="dropdown-menu">
+                    <li><a class="dropdown-item" href="#" onclick="showAdminDashboard()">
+                        <i class="fas fa-tachometer-alt me-2"></i>Admin Dashboard
+                    </a></li>
+                    <li><a class="dropdown-item" href="#" onclick="showNGOs()">
+                        <i class="fas fa-users me-2"></i>Manage NGOs
+                    </a></li>
+                    <li><a class="dropdown-item" href="#" onclick="showDeliveryPersons()">
+                        <i class="fas fa-truck me-2"></i>Delivery Persons
+                    </a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item" href="#" onclick="adminLogout()">
+                        <i class="fas fa-sign-out-alt me-2"></i>Logout
+                    </a></li>
+                </ul>
+            </div>
+        `;
+    }
+}
+
+// Admin logout
+function adminLogout() {
+    localStorage.removeItem('foodshare_admin');
+    currentAdmin = null;
+
+    // Restore regular user UI if logged in
+    if (currentUser) {
+        updateUIForLoggedInUser(currentUser);
+    } else {
+        location.reload();
+    }
+
+    showNotification('Admin logged out successfully', 'info');
+}
+
+// Initialize default admin
+async function initializeDefaultAdmin() {
+    try {
+        await dataManager.initializeDefaultAdmin();
+    } catch (error) {
+        console.error('Error initializing default admin:', error);
+    }
+}
+
+// Show admin dashboard
+function showAdminDashboard() {
+    if (!currentAdmin) {
+        showNotification('Please login as admin first', 'error');
+        return;
+    }
+
+    const modal = document.createElement('div');
+    modal.className = 'modal fade';
+    modal.innerHTML = `
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header bg-warning">
+                    <h5 class="modal-title">
+                        <i class="fas fa-tachometer-alt me-2"></i>Admin Dashboard
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="adminDashboardContent">
+                        <div class="text-center">
+                            <div class="loading-spinner"></div>
+                            <p>Loading admin dashboard...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    const bsModal = new bootstrap.Modal(modal);
+    bsModal.show();
+
+    // Load admin dashboard data
+    loadAdminDashboardData();
+}
+
+// Load admin dashboard data
+async function loadAdminDashboardData() {
+    const dashboardContent = document.getElementById('adminDashboardContent');
+
+    try {
+        // Wait for dataManager to be ready
+        await waitForDataManager();
+
+        const [stats, ngos, deliveryPersons] = await Promise.all([
+            dataManager.getStatistics().catch(error => {
+                console.warn('Error getting statistics, using fallback:', error);
+                return { totalDonations: 0, totalUsers: 0, urgentItems: 0, activeDonations: 0 };
+            }),
+            dataManager.getAllNGOs().catch(error => {
+                console.warn('Error getting NGOs, using fallback:', error);
+                return [];
+            }),
+            dataManager.getAllDeliveryPersons().catch(error => {
+                console.warn('Error getting delivery persons, using fallback:', error);
+                return [];
+            })
+        ]);
+
+        dashboardContent.innerHTML = `
+            <div class="row mb-4">
+                <div class="col-12">
+                    <h4>System Overview</h4>
+                    <p class="text-muted">Welcome to the FoodShare Admin Panel</p>
+                </div>
+            </div>
+
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <div class="card bg-primary text-white">
+                        <div class="card-body text-center">
+                            <i class="fas fa-box fa-2x mb-2"></i>
+                            <h3>${stats.totalDonations || 0}</h3>
+                            <p>Total Donations</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-success text-white">
+                        <div class="card-body text-center">
+                            <i class="fas fa-users fa-2x mb-2"></i>
+                            <h3>${stats.totalUsers || 0}</h3>
+                            <p>Registered Users</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-info text-white">
+                        <div class="card-body text-center">
+                            <i class="fas fa-hands-helping fa-2x mb-2"></i>
+                            <h3>${ngos.length || 0}</h3>
+                            <p>Active NGOs</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-warning text-white">
+                        <div class="card-body text-center">
+                            <i class="fas fa-truck fa-2x mb-2"></i>
+                            <h3>${deliveryPersons.length || 0}</h3>
+                            <p>Delivery Persons</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h6 class="mb-0">Quick Actions</h6>
+                        </div>
+                        <div class="card-body">
+                            <button class="btn btn-primary me-2 mb-2" onclick="showNGOs()">
+                                <i class="fas fa-users me-2"></i>Manage NGOs
+                            </button>
+                            <button class="btn btn-success me-2 mb-2" onclick="showDeliveryPersons()">
+                                <i class="fas fa-truck me-2"></i>Delivery Persons
+                            </button>
+                            <button class="btn btn-info me-2 mb-2" onclick="showSystemStats()">
+                                <i class="fas fa-chart-bar me-2"></i>View Statistics
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h6 class="mb-0">Recent Activity</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="activity-item">
+                                <i class="fas fa-plus-circle text-success me-2"></i>
+                                <small class="text-muted">Admin logged in at ${new Date(currentAdmin.login_time).toLocaleString()}</small>
+                            </div>
+                            <hr>
+                            <div class="activity-item">
+                                <i class="fas fa-info-circle text-info me-2"></i>
+                                <small class="text-muted">System is running normally</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    } catch (error) {
+        console.error('Error loading admin dashboard:', error);
+        dashboardContent.innerHTML = `
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                Error loading dashboard data. Please try again.
+            </div>
+        `;
+    }
+}
+
+// Wait for dataManager to be ready
+function waitForDataManager() {
+    return new Promise((resolve) => {
+        const checkDataManager = () => {
+            if (typeof dataManager !== 'undefined' && dataManager) {
+                resolve();
+            } else {
+                setTimeout(checkDataManager, 100);
+            }
+        };
+        checkDataManager();
+    });
+}
+
+// Show NGOs management
+function showNGOs() {
+    if (!currentAdmin) {
+        showNotification('Please login as admin first', 'error');
+        return;
+    }
+
+    const modal = document.createElement('div');
+    modal.className = 'modal fade';
+    modal.innerHTML = `
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header bg-info">
+                    <h5 class="modal-title">
+                        <i class="fas fa-users me-2"></i>NGO Management
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="ngoManagementContent">
+                        <div class="text-center">
+                            <div class="loading-spinner"></div>
+                            <p>Loading NGOs...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    const bsModal = new bootstrap.Modal(modal);
+    bsModal.show();
+
+    // Load NGOs data
+    loadNGOsData();
+}
+
+// Load NGOs data
+async function loadNGOsData() {
+    const content = document.getElementById('ngoManagementContent');
+
+    try {
+        const ngos = await dataManager.getAllNGOs();
+
+        content.innerHTML = `
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h6>NGOs (${ngos.length})</h6>
+                <button class="btn btn-success" onclick="showAddNGOForm()">
+                    <i class="fas fa-plus me-2"></i>Add NGO
+                </button>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Location</th>
+                            <th>Contact</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${ngos.map(ngo => `
+                            <tr>
+                                <td>${ngo.name}</td>
+                                <td>${ngo.location}</td>
+                                <td>${ngo.contact_person}<br><small class="text-muted">${ngo.email}</small></td>
+                                <td><span class="badge bg-${ngo.status === 'active' ? 'success' : 'warning'}">${ngo.status}</span></td>
+                                <td>
+                                    <button class="btn btn-sm btn-primary me-1" onclick="editNGO(${ngo.id})">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-danger" onclick="deleteNGO(${ngo.id})">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        `).join('') || '<tr><td colspan="5" class="text-center">No NGOs found</td></tr>'}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    } catch (error) {
+        console.error('Error loading NGOs:', error);
+        content.innerHTML = `
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                Error loading NGOs data. Please try again.
+            </div>
+        `;
+    }
+}
+
+// Show add NGO form
+function showAddNGOForm() {
+    const modal = document.createElement('div');
+    modal.className = 'modal fade';
+    modal.innerHTML = `
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-success">
+                    <h5 class="modal-title">
+                        <i class="fas fa-plus me-2"></i>Add New NGO
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addNGOForm">
+                        <div class="mb-3">
+                            <label class="form-label">NGO Name *</label>
+                            <input type="text" class="form-control" id="ngoName" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Location *</label>
+                            <input type="text" class="form-control" id="ngoLocation" placeholder="City, State" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Contact Person *</label>
+                            <input type="text" class="form-control" id="ngoContactPerson" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Email *</label>
+                            <input type="email" class="form-control" id="ngoEmail" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Phone</label>
+                            <input type="tel" class="form-control" id="ngoPhone">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Description</label>
+                            <textarea class="form-control" id="ngoDescription" rows="3"></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-success w-100">
+                            <i class="fas fa-save me-2"></i>Add NGO
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    const bsModal = new bootstrap.Modal(modal);
+    bsModal.show();
+
+    // Handle form submission
+    document.getElementById('addNGOForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        const ngoData = {
+            name: document.getElementById('ngoName').value,
+            location: document.getElementById('ngoLocation').value,
+            contact_person: document.getElementById('ngoContactPerson').value,
+            email: document.getElementById('ngoEmail').value,
+            phone: document.getElementById('ngoPhone').value,
+            description: document.getElementById('ngoDescription').value
+        };
+
+        try {
+            await dataManager.addNGO(ngoData);
+            showNotification('NGO added successfully!', 'success');
+            bsModal.hide();
+            loadNGOsData(); // Refresh the list
+        } catch (error) {
+            showNotification('Error adding NGO: ' + error.message, 'error');
+        }
+    });
+}
+
+// Show delivery persons management
+function showDeliveryPersons() {
+    if (!currentAdmin) {
+        showNotification('Please login as admin first', 'error');
+        return;
+    }
+
+    const modal = document.createElement('div');
+    modal.className = 'modal fade';
+    modal.innerHTML = `
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header bg-warning">
+                    <h5 class="modal-title">
+                        <i class="fas fa-truck me-2"></i>Delivery Person Management
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="deliveryPersonContent">
+                        <div class="text-center">
+                            <div class="loading-spinner"></div>
+                            <p>Loading delivery persons...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    const bsModal = new bootstrap.Modal(modal);
+    bsModal.show();
+
+    // Load delivery persons data
+    loadDeliveryPersonsData();
+}
+
+// Load delivery persons data
+async function loadDeliveryPersonsData() {
+    const content = document.getElementById('deliveryPersonContent');
+
+    try {
+        const deliveryPersons = await dataManager.getAllDeliveryPersons();
+
+        content.innerHTML = `
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h6>Delivery Persons (${deliveryPersons.length})</h6>
+                <button class="btn btn-success" onclick="showAddDeliveryPersonForm()">
+                    <i class="fas fa-plus me-2"></i>Add Delivery Person
+                </button>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Username</th>
+                            <th>Contact</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${deliveryPersons.map(person => `
+                            <tr>
+                                <td>${person.name}</td>
+                                <td>${person.username}</td>
+                                <td>${person.email}<br><small class="text-muted">${person.phone}</small></td>
+                                <td><span class="badge bg-${person.status === 'active' ? 'success' : 'warning'}">${person.status}</span></td>
+                                <td>
+                                    <button class="btn btn-sm btn-primary me-1" onclick="editDeliveryPerson(${person.id})">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-danger" onclick="deleteDeliveryPerson(${person.id})">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        `).join('') || '<tr><td colspan="5" class="text-center">No delivery persons found</td></tr>'}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    } catch (error) {
+        console.error('Error loading delivery persons:', error);
+        content.innerHTML = `
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                Error loading delivery persons data. Please try again.
+            </div>
+        `;
+    }
+}
+
+// Show add delivery person form
+function showAddDeliveryPersonForm() {
+    const modal = document.createElement('div');
+    modal.className = 'modal fade';
+    modal.innerHTML = `
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-success">
+                    <h5 class="modal-title">
+                        <i class="fas fa-plus me-2"></i>Add Delivery Person
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addDeliveryPersonForm">
+                        <div class="mb-3">
+                            <label class="form-label">Full Name *</label>
+                            <input type="text" class="form-control" id="deliveryPersonName" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Email *</label>
+                            <input type="email" class="form-control" id="deliveryPersonEmail" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Phone *</label>
+                            <input type="tel" class="form-control" id="deliveryPersonPhone" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Location *</label>
+                            <input type="text" class="form-control" id="deliveryPersonLocation" placeholder="City, State" required>
+                        </div>
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle me-2"></i>
+                            <strong>Note:</strong> Username and password will be auto-generated and displayed after creation.
+                        </div>
+                        <button type="submit" class="btn btn-success w-100">
+                            <i class="fas fa-save me-2"></i>Add Delivery Person
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    const bsModal = new bootstrap.Modal(modal);
+    bsModal.show();
+
+    // Handle form submission
+    document.getElementById('addDeliveryPersonForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        const deliveryPersonData = {
+            name: document.getElementById('deliveryPersonName').value,
+            email: document.getElementById('deliveryPersonEmail').value,
+            phone: document.getElementById('deliveryPersonPhone').value,
+            location: document.getElementById('deliveryPersonLocation').value
+        };
+
+        try {
+            const newPerson = await dataManager.addDeliveryPerson(deliveryPersonData);
+            showNotification('Delivery person added successfully!', 'success');
+
+            // Show credentials
+            showDeliveryPersonCredentials(newPerson);
+
+            bsModal.hide();
+            loadDeliveryPersonsData(); // Refresh the list
+        } catch (error) {
+            showNotification('Error adding delivery person: ' + error.message, 'error');
+        }
+    });
+}
+
+// Show delivery person credentials
+function showDeliveryPersonCredentials(person) {
+    const modal = document.createElement('div');
+    modal.className = 'modal fade';
+    modal.innerHTML = `
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-info">
+                    <h5 class="modal-title">
+                        <i class="fas fa-key me-2"></i>Delivery Person Credentials
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body text-center">
+                    <div class="alert alert-success">
+                        <i class="fas fa-check-circle fa-2x mb-3"></i>
+                        <h5>Account Created Successfully!</h5>
+                        <p>Please save these credentials and share them with the delivery person.</p>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-sm-6">
+                            <strong>Username:</strong><br>
+                            <code class="bg-light p-2 d-block">${person.username}</code>
+                        </div>
+                        <div class="col-sm-6">
+                            <strong>Password:</strong><br>
+                            <code class="bg-light p-2 d-block">${person.password}</code>
+                        </div>
+                    </div>
+
+                    <div class="mt-3">
+                        <button class="btn btn-primary" onclick="copyCredentials('${person.username}', '${person.password}')">
+                            <i class="fas fa-copy me-2"></i>Copy Credentials
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    const bsModal = new bootstrap.Modal(modal);
+    bsModal.show();
+}
+
+// Copy credentials to clipboard
+function copyCredentials(username, password) {
+    const credentials = `Username: ${username}\nPassword: ${password}`;
+    navigator.clipboard.writeText(credentials).then(() => {
+        showNotification('Credentials copied to clipboard!', 'success');
+    });
+}
+
+// NGO Management Functions
+function editNGO(id) {
+    // Get NGO data and show edit form
+    dataManager.getNGOById(id).then(ngo => {
+        if (!ngo) {
+            showNotification('NGO not found', 'error');
+            return;
+        }
+
+        showEditNGOForm(ngo);
+    }).catch(error => {
+        console.error('Error getting NGO:', error);
+        showNotification('Error loading NGO data', 'error');
+    });
+}
+
+function deleteNGO(id) {
+    if (confirm('Are you sure you want to delete this NGO? This action cannot be undone.')) {
+        dataManager.deleteNGO(id).then(() => {
+            showNotification('NGO deleted successfully!', 'success');
+            loadNGOsData(); // Refresh the list
+        }).catch(error => {
+            console.error('Error deleting NGO:', error);
+            showNotification('Error deleting NGO: ' + error.message, 'error');
+        });
+    }
+}
+
+// Delivery Person Management Functions
+function editDeliveryPerson(id) {
+    // Get delivery person data and show edit form
+    dataManager.getDeliveryPersonById(id).then(person => {
+        if (!person) {
+            showNotification('Delivery person not found', 'error');
+            return;
+        }
+
+        showEditDeliveryPersonForm(person);
+    }).catch(error => {
+        console.error('Error getting delivery person:', error);
+        showNotification('Error loading delivery person data', 'error');
+    });
+}
+
+function deleteDeliveryPerson(id) {
+    if (confirm('Are you sure you want to delete this delivery person? This action cannot be undone.')) {
+        dataManager.deleteDeliveryPerson(id).then(() => {
+            showNotification('Delivery person deleted successfully!', 'success');
+            loadDeliveryPersonsData(); // Refresh the list
+        }).catch(error => {
+            console.error('Error deleting delivery person:', error);
+            showNotification('Error deleting delivery person: ' + error.message, 'error');
+        });
+    }
+}
+
+// Show edit NGO form
+function showEditNGOForm(ngo) {
+    const modal = document.createElement('div');
+    modal.className = 'modal fade';
+    modal.innerHTML = `
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-primary">
+                    <h5 class="modal-title">
+                        <i class="fas fa-edit me-2"></i>Edit NGO
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="editNGOForm">
+                        <input type="hidden" id="editNgoId" value="${ngo.id}">
+                        <div class="mb-3">
+                            <label class="form-label">NGO Name *</label>
+                            <input type="text" class="form-control" id="editNgoName" value="${ngo.name}" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Location *</label>
+                            <input type="text" class="form-control" id="editNgoLocation" value="${ngo.location}" placeholder="City, State" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Contact Person *</label>
+                            <input type="text" class="form-control" id="editNgoContactPerson" value="${ngo.contact_person}" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Email *</label>
+                            <input type="email" class="form-control" id="editNgoEmail" value="${ngo.email}" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Phone</label>
+                            <input type="tel" class="form-control" id="editNgoPhone" value="${ngo.phone || ''}">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Description</label>
+                            <textarea class="form-control" id="editNgoDescription" rows="3">${ngo.description || ''}</textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Status</label>
+                            <select class="form-select" id="editNgoStatus">
+                                <option value="active" ${ngo.status === 'active' ? 'selected' : ''}>Active</option>
+                                <option value="inactive" ${ngo.status === 'inactive' ? 'selected' : ''}>Inactive</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="fas fa-save me-2"></i>Update NGO
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    const bsModal = new bootstrap.Modal(modal);
+    bsModal.show();
+
+    // Handle form submission
+    document.getElementById('editNGOForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        const ngoData = {
+            name: document.getElementById('editNgoName').value,
+            location: document.getElementById('editNgoLocation').value,
+            contact_person: document.getElementById('editNgoContactPerson').value,
+            email: document.getElementById('editNgoEmail').value,
+            phone: document.getElementById('editNgoPhone').value,
+            description: document.getElementById('editNgoDescription').value,
+            status: document.getElementById('editNgoStatus').value
+        };
+
+        try {
+            await dataManager.updateNGO(ngo.id, ngoData);
+            showNotification('NGO updated successfully!', 'success');
+            bsModal.hide();
+            loadNGOsData(); // Refresh the list
+        } catch (error) {
+            showNotification('Error updating NGO: ' + error.message, 'error');
+        }
+    });
+}
+
+// Show edit delivery person form
+function showEditDeliveryPersonForm(person) {
+    const modal = document.createElement('div');
+    modal.className = 'modal fade';
+    modal.innerHTML = `
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-primary">
+                    <h5 class="modal-title">
+                        <i class="fas fa-edit me-2"></i>Edit Delivery Person
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="editDeliveryPersonForm">
+                        <input type="hidden" id="editDeliveryPersonId" value="${person.id}">
+                        <div class="mb-3">
+                            <label class="form-label">Full Name *</label>
+                            <input type="text" class="form-control" id="editDeliveryPersonName" value="${person.name}" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Email *</label>
+                            <input type="email" class="form-control" id="editDeliveryPersonEmail" value="${person.email}" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Phone *</label>
+                            <input type="tel" class="form-control" id="editDeliveryPersonPhone" value="${person.phone}" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Location *</label>
+                            <input type="text" class="form-control" id="editDeliveryPersonLocation" value="${person.location}" placeholder="City, State" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Username</label>
+                            <input type="text" class="form-control" id="editDeliveryPersonUsername" value="${person.username}" readonly>
+                            <div class="form-text">Username cannot be changed</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Status</label>
+                            <select class="form-select" id="editDeliveryPersonStatus">
+                                <option value="active" ${person.status === 'active' ? 'selected' : ''}>Active</option>
+                                <option value="inactive" ${person.status === 'inactive' ? 'selected' : ''}>Inactive</option>
+                            </select>
+                        </div>
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            <strong>Note:</strong> Password cannot be changed from this form. Contact the delivery person directly if they need a new password.
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="fas fa-save me-2"></i>Update Delivery Person
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    const bsModal = new bootstrap.Modal(modal);
+    bsModal.show();
+
+    // Handle form submission
+    document.getElementById('editDeliveryPersonForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        const deliveryPersonData = {
+            name: document.getElementById('editDeliveryPersonName').value,
+            email: document.getElementById('editDeliveryPersonEmail').value,
+            phone: document.getElementById('editDeliveryPersonPhone').value,
+            location: document.getElementById('editDeliveryPersonLocation').value,
+            status: document.getElementById('editDeliveryPersonStatus').value
+        };
+
+        try {
+            await dataManager.updateDeliveryPerson(person.id, deliveryPersonData);
+            showNotification('Delivery person updated successfully!', 'success');
+            bsModal.hide();
+            loadDeliveryPersonsData(); // Refresh the list
+        } catch (error) {
+            showNotification('Error updating delivery person: ' + error.message, 'error');
+        }
+    });
+}
+
+function showSystemStats() {
+    showNotification('System statistics view will be implemented in the next phase', 'info');
+}
+
 // Make functions available globally
 window.showDonateForm = showDonateForm;
 window.showFindFood = showFindFood;
@@ -762,3 +1690,18 @@ window.logout = logout;
 window.requestFood = requestFood;
 window.shareDonation = shareDonation;
 window.makeAnotherDonation = makeAnotherDonation;
+
+// Admin functions
+window.handleAdminLogin = handleAdminLogin;
+window.adminLogout = adminLogout;
+window.showAdminDashboard = showAdminDashboard;
+window.showNGOs = showNGOs;
+window.showDeliveryPersons = showDeliveryPersons;
+window.showAddNGOForm = showAddNGOForm;
+window.showAddDeliveryPersonForm = showAddDeliveryPersonForm;
+window.copyCredentials = copyCredentials;
+window.editNGO = editNGO;
+window.deleteNGO = deleteNGO;
+window.editDeliveryPerson = editDeliveryPerson;
+window.deleteDeliveryPerson = deleteDeliveryPerson;
+window.showSystemStats = showSystemStats;
